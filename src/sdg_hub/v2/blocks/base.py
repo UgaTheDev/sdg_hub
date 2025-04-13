@@ -8,7 +8,8 @@ from typing import List, Optional, Union, Iterator, Any, Dict, Type, TypeVar
 from pydantic import BaseModel, Field, ConfigDict
 from datasets import Dataset
 
-T = TypeVar('T', bound='Block')
+T = TypeVar("T", bound="Block")
+
 
 class Block(BaseModel):
     """
@@ -30,6 +31,29 @@ class Block(BaseModel):
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    def __hash__(self) -> int:
+        """
+        Make Block hashable by using the name as the hash.
+        
+        Returns:
+            int: Hash value for the block
+        """
+        return hash(self.name)
+        
+    def __eq__(self, other: Any) -> bool:
+        """
+        Compare blocks for equality.
+        
+        Args:
+            other: The object to compare with
+            
+        Returns:
+            bool: True if the blocks are equal, False otherwise
+        """
+        if not isinstance(other, Block):
+            return False
+        return self.name == other.name
 
     def connect(self, other: Union["Block", List["Block"]]) -> None:
         """
@@ -56,14 +80,18 @@ class Block(BaseModel):
         if self not in other.input_blocks:
             other.input_blocks.append(self)
 
-    def __rshift__(self, other: Union["Block", List["Block"]]) -> None:
+    def __rshift__(self, other: Union["Block", List["Block"]]) -> Union["Block", List["Block"]]:
         """
         Overload the >> operator to connect blocks.
 
         Args:
             other: Either a single Block or a list of Blocks to connect to
+            
+        Returns:
+            The target block(s) to allow for chaining
         """
         self.connect(other)
+        return other
 
     def __rrshift__(self, other: List["Block"]) -> None:
         """
@@ -93,28 +121,33 @@ class Block(BaseModel):
     def model_dump(self, **kwargs) -> Dict[str, Any]:
         """
         Custom serialization to handle circular references.
+
         Only serializes the name and references to connected blocks by name.
         """
         dump = {
             "name": self.name,
             "input_blocks": [block.name for block in self.input_blocks],
-            "output_blocks": [block.name for block in self.output_blocks]
+            "output_blocks": [block.name for block in self.output_blocks],
         }
         return dump
 
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any], block_registry: Dict[str, T]) -> T:
+    def from_dict(
+        cls: Type[T], data: Dict[str, Any], block_registry: Dict[str, T]
+    ) -> T:
         """
         Reconstruct a block from its serialized form.
-        
+
         Args:
             data: Serialized block data
             block_registry: Dictionary mapping block names to block instances
-            
-        Returns:
+
+        Returns
+        -------
             Reconstructed block instance
-            
-        Raises:
+
+        Raises
+        ------
             ValueError: If a referenced block is not found in the registry
         """
         # Create the block if it doesn't exist in the registry
@@ -123,18 +156,17 @@ class Block(BaseModel):
             block_registry[data["name"]] = block
         else:
             block = block_registry[data["name"]]
-        
+
         # Connect to input blocks
         for input_name in data["input_blocks"]:
             if input_name not in block_registry:
                 raise ValueError(f"Input block {input_name} not found in registry")
             block_registry[input_name] >> block
-        
+
         # Connect to output blocks
         for output_name in data["output_blocks"]:
             if output_name not in block_registry:
                 raise ValueError(f"Output block {output_name} not found in registry")
             block >> block_registry[output_name]
-        
-        return block
 
+        return block
