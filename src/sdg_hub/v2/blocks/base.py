@@ -4,7 +4,17 @@ Base Block implementation for SDG Hub v2.
 A Block represents a processing unit that operates on Huggingface Dataset objects.
 """
 
-from typing import List, Optional, Union, Iterator, Any, Dict, Type, TypeVar
+from typing import (
+    List,
+    Optional,
+    Union,
+    Iterator,
+    Any,
+    Dict,
+    Type,
+    TypeVar,
+    AsyncIterator,
+)
 from pydantic import BaseModel, Field, ConfigDict
 from datasets import Dataset
 
@@ -31,24 +41,26 @@ class Block(BaseModel):
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     def __hash__(self) -> int:
         """
         Make Block hashable by using the name as the hash.
-        
-        Returns:
+
+        Returns
+        -------
             int: Hash value for the block
         """
         return hash(self.name)
-        
+
     def __eq__(self, other: Any) -> bool:
         """
         Compare blocks for equality.
-        
+
         Args:
             other: The object to compare with
-            
-        Returns:
+
+        Returns
+        -------
             bool: True if the blocks are equal, False otherwise
         """
         if not isinstance(other, Block):
@@ -80,14 +92,17 @@ class Block(BaseModel):
         if self not in other.input_blocks:
             other.input_blocks.append(self)
 
-    def __rshift__(self, other: Union["Block", List["Block"]]) -> Union["Block", List["Block"]]:
+    def __rshift__(
+        self, other: Union["Block", List["Block"]]
+    ) -> Union["Block", List["Block"]]:
         """
         Overload the >> operator to connect blocks.
 
         Args:
             other: Either a single Block or a list of Blocks to connect to
-            
-        Returns:
+
+        Returns
+        -------
             The target block(s) to allow for chaining
         """
         self.connect(other)
@@ -103,9 +118,9 @@ class Block(BaseModel):
         for block in other:
             block.connect(self)
 
-    def run(self, *inputs: Dataset) -> Iterator[Any]:
+    async def run(self, *inputs: Dataset) -> AsyncIterator[Any]:
         """
-        Process the input datasets and yield output rows.
+        Process the input datasets and yield output rows asynchronously.
 
         This method should be implemented by subclasses.
 
@@ -116,11 +131,52 @@ class Block(BaseModel):
         ------
             Processed rows from the output dataset
         """
-        raise NotImplementedError("Subclasses must implement the run method")
+        raise NotImplementedError("Subclasses must implement the async run method")
+
+    async def run_sync(self, *inputs: Dataset) -> Iterator[Any]:
+        """
+        Run synchronous code within async blocks.
+
+        Subclasses can implement _run_sync instead of run for simpler blocks.
+
+        Args:
+            *inputs: One or more Huggingface Dataset objects
+
+        Returns
+        -------
+            Iterator for processed rows
+        """
+        # Default implementation delegates to _run_sync if it exists
+        if hasattr(self, "_run_sync") and callable(getattr(self, "_run_sync")):
+            # If the block has a _run_sync method, use that
+            # This allows simple blocks to avoid dealing with async
+            sync_iterator = self._run_sync(*inputs)
+            for item in sync_iterator:
+                yield item
+        else:
+            # Otherwise, require implementation of run
+            raise NotImplementedError(
+                "Either run or _run_sync must be implemented by subclasses"
+            )
+
+    def _run_sync(self, *inputs: Dataset) -> Iterator[Any]:
+        """
+        Implement synchronous logic for simpler blocks.
+
+        Subclasses can implement this instead of the async run method for simpler cases.
+
+        Args:
+            *inputs: One or more Huggingface Dataset objects
+
+        Yields
+        ------
+            Processed rows from the output dataset
+        """
+        raise NotImplementedError("Subclasses must implement either run or _run_sync")
 
     def model_dump(self, **kwargs) -> Dict[str, Any]:
         """
-        Custom serialization to handle circular references.
+        Serialize the object while handling circular references.
 
         Only serializes the name and references to connected blocks by name.
         """
