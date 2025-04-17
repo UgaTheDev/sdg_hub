@@ -1,29 +1,82 @@
 # SDG Hub v2 Architecture Design
 
 ## Table of Contents
-1. [Motivation](#motivation)
-2. [Architecture Overview](#architecture-overview)
-3. [Features](#features)
-4. [Examples](#examples)
-5. [API Documentation](#api-documentation)
-6. [Future Enhancements](#future-enhancements)
-
-## Motivation
-
-The SDG Hub is a framework for synthetic data generation that helps create high-quality datasets for training and evaluating AI systems. While the current implementation has been effective for many use cases, several limitations and pain points have emerged as the complexity and scale of data generation tasks have increased.
-
-1. **Limited Composability**: The current pipeline-based approach enforces a linear execution flow through chained blocks. This makes it difficult to create more complex data generation workflows with parallel processing, conditional branches, or feedback loops. Each pipeline must process the entire dataset sequentially, even when parts of the workflow could be parallelized.
-
-2. **Tight Coupling**: Blocks in the current design are tightly coupled with their execution context. Executing a couple of blocks require them to be wrapped in a pipeline - which needs a flow yaml for definition - which needs registration of llm prompts. This arised due to the previous (now stale) requirement of yaml driven definition.
-
-3. **Redundant Configuration Logic**: There's significant redundancy in how configurations are loaded and processed across different blocks. Each flow file requires repetitive boilerplate configuration, increasing the likelihood of errors and making it harder to standardize best practices.
-
-4. **Scalability Challenges**: While the current implementation includes basic parallelization through worker threads, this approach doesn't scale well for complex workflows or large datasets. The threading model becomes inefficient when dealing with I/O-bound operations typical in LLM-based generation. We need async/await to scale.
-
-5. **Limited Customizability**: Even though the construct of block enables customization, there are a lot of boilerplate setup and configuration that is required. You can not simply wrap any python function as a block and expect it to work.
+1. [v1 Architecture Overview](#v1-architecture-overview)
+2. [v2 Architecture Overview](#v2-architecture-overview)
+3. [API Mockups](#api-mockups)
+4. [Example Graph Patterns](#example-graph-patterns)
+5. [Future Enhancements](#future-enhancements)
 
 
-## Architecture Overview
+## v1 Architecture Overview
+
+#### Block 
+At the heart of the framework is the Block. Each block is a self-contained computational unit that performs specific tasks, such as:
+
+- Making LLM calls
+- Performing data transformations
+- Applying filters
+
+#### Pipeline
+Blocks can be chained together to form a Pipeline. Pipelines enable:
+
+- Linear or recursive chaining of blocks.
+- Execution of complex workflows by chaining multiple pipelines together.
+
+#### Flow 
+The YAML configuration file, known as the Flow, is central to defining data generation workflows in the SDG Framework. A Flow describes how blocks and pipelines are orchestrated to process and generate data
+
+```yaml
+- block_type: LLMBlock
+  block_config:
+    block_name: gen_questions
+    config_path: configs/skills/freeform_questions.yaml
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
+    output_cols:
+      - question
+    batch_kwargs:
+      num_samples: 30
+  drop_duplicates:
+    - question
+- block_type: FilterByValueBlock
+  block_config:
+    block_name: filter_questions
+    filter_column: score
+    filter_value: 1.0
+    operation: operator.eq
+    convert_dtype: float
+    batch_kwargs:
+      num_procs: 8
+  drop_columns:
+    - evaluation
+    - score
+    - num_samples
+- block_type: LLMBlock
+  block_config:
+    block_name: gen_responses
+    config_path: configs/skills/freeform_responses.yaml
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
+    output_cols:
+      - response
+```
+
+#### SDG
+The SDG class is the orchestrator that manages the execution of data generation workflows. It provides several key features:
+
+- Pipeline Management: Takes a list of pipelines and executes them in sequence
+- Hosts the Parallel Processing Logic: Splits the dataset into batches and processes them in parallel using multi-worker execution through ThreadPoolExecutor
+- Checkpointing: Supports saving intermediate results to data checkpoints and resuming from them
+
+
+## Pain Points with v1 Architecture
+
+- **YAML Based Definition**: The current design is tightly coupled with the YAML based definition of flows. This makes it difficult to extend the framework to support pythonic definition. 
+- **No explicit connections between blocks**: There's no explicit way to connect blocks together. The only way to achieve this is to wrap them in a pipeline
+- **Sequential Execution**: The current pipeline object is basically a list of blocks, which triggers the sequential execution of blocks. This makes it difficult to create more complex workflows with parallel processing, conditional branches, or feedback loops
+- **Tight Coupling**: Blocks in the current design are tightly coupled with their execution context. Executing a couple of blocks require them to be wrapped in a pipeline - which needs a flow yaml for definition - which needs registration of llm prompts. This arised due to the previous (now stale) requirement of yaml driven definition.
+
+
+## v2 Architecture Overview
 
 To address these limitations, we are introducing a new graph-based architecture for SDG Hub v2. This redesign is centered around two core primitives - Nodes and Graph.
 
@@ -53,13 +106,29 @@ There are three fundamental types of nodes in the SDG Hub v2 architecture:
    - Saving datasets to disk
    - Exporting to specific file formats
 
-### Defining Nodes
 
-Nodes can be defined in two ways:
+#### Graph
+A Graph represents the structure and flow of a data generation pipeline. It defines the relationships between Nodes, the paths data can take through the workflow, and the execution strategy. Graphs can range from simple linear sequences to complex directed acyclic graphs (DAGs) with branching, merging, and conditional paths.
 
-1. **Class-based Definition**:
+  - Supports both sequential and parallel execution paths
+  - Enables conditional branching based on data content or execution state
+  - Allows cyclic execution to enable feedback loops
+  - Allows for subgraphs as reusable components
+  - Provides clear visualization of data flow and dependencies
+
+
+- **Data**: Dataflow between blocks and pipelines is handled using Hugging Face Datasets, which are based on Arrow tables. This provides:
+
+  - Native parallelization capabilities (e.g., maps, filters).
+  - Support for efficient data transformations.
+ 
+
+## API Mockups
+
+### Explicit Definition:
 ```python
-from sdg_hub.v2.node.base import Node, NodeType
+from sdg_hub.v2.node import Node, NodeType
+from sdg_hub.v2.graph import Graph
 from datasets import Dataset
 
 class MySourceNode(Node):
@@ -91,106 +160,54 @@ class MySinkNode(Node):
                 # Process and save data
                 print(f"Saving: {row}")
                 yield row
+
+graph = Graph(name="my_graph", description="A graph with a source node, a process node and a sink node")
+graph.add_node(MySourceNode(name="source_node"))
+graph.add_node(MyProcessNode(name="process_node"))
+graph.add_node(MySinkNode(name="sink_node"))
+
+graph.add_edge("source_node", "process_node")
+graph.add_edge("process_node", "sink_node")
+
+graph.run()
 ```
 
-2. **Decorator-based Definition**:
+### Syntactic Sugar:
 ```python
-from sdg_hub.v2.node.decorator import Node
+from sdg_hub.v2.node import Node, NodeType 
+from sdg_hub.v2.graph import Graph
 from datasets import Dataset
 
-@Node(name="source_node", description="A source node that generates data")
+@Node(name="source_node", node_type=NodeType.SOURCE, description="A source node that generates data")
 def source_node():
     for i in range(10):
         yield {"id": i, "text": f"Generated text {i}"}
 
-@Node(name="process_node", description="A node that processes data")
+@Node(name="process_node", node_type=NodeType.TRANSFORM, description="A node that processes data")
 def process_node(inputs: Dataset):
     for row in inputs:
         yield {"processed": row["text"].upper()}
 
-@Node(name="sink_node", description="A node that saves data")
+@Node(name="sink_node", node_type=NodeType.SINK, description="A node that saves data")
 def sink_node(inputs: Dataset):
     for row in inputs:
         print(f"Saving: {row}")
         yield row
 
-# Async nodes are also supported
-@Node(name="async_node", description="An async node")
-async def async_node(inputs: Dataset):
-    for row in inputs:
-        # Do some async processing
-        processed = await process_async(row)
-        yield processed
+with Graph(name="my_graph", description="A graph with a source node, a process node and a sink node") as graph:
+   source_node = source_node()
+   process_node = process_node()
+   sink_node = sink_node()
+
+   source_node >> process_node >> sink_node
+
+graph.run()
 ```
 
-The decorator approach is more concise and automatically handles:
-- Node type detection based on input/output patterns
-- Async/sync execution support
-- Input/output validation
-- Error handling and logging
-- Node registration with the graph
 
-#### Graph
-A Graph represents the structure and flow of a data generation pipeline. It defines the relationships between Nodes, the paths data can take through the workflow, and the execution strategy. Graphs can range from simple linear sequences to complex directed acyclic graphs (DAGs) with branching, merging, and conditional paths.
+## Example Graph Patterns
 
-  - Supports both sequential and parallel execution paths
-  - Enables conditional branching based on data content or execution state
-  - Allows cyclic execution to enable feedback loops
-  - Allows for subgraphs as reusable components
-  - Provides clear visualization of data flow and dependencies
-
-
-- **Data**: Dataflow between blocks and pipelines is handled using Hugging Face Datasets, which are based on Arrow tables. This provides:
-
-  - Native parallelization capabilities (e.g., maps, filters).
-  - Support for efficient data transformations.
- 
-
-### Design Principles
-1. **Composability**: Nodes should be designed to be combined in various ways without modification. New graphs can be created by connecting existing nodes, enabling rapid prototyping and experimentation.
-
-2. **Extensibility**: The architecture should allow for easy addition of new node types, execution strategies, and data formats without changing core components. Users should be able to extend the system with custom functionality specific to their needs.
-
-3. **Maintainability**: The system should have a clear separation of concerns, well-defined interfaces, and comprehensive documentation. This makes it easier to understand, debug, and modify components without unintended consequences.
-
-4. **Observability**: Every step in the data generation process should be traceable and debuggable. The system should provide detailed logging, metrics, and visualization capabilities to help users understand what is happening at each stage.
-
-5. **Scalability**: The architecture should support both vertical scaling (more efficient use of resources on a single machine) and horizontal scaling (distribution across multiple machines) for handling large-scale data generation tasks.
-
-6. **User Experience**: Despite its power and flexibility, the system should remain accessible to users with varying levels of technical expertise. This includes providing intuitive APIs, clear documentation, and tools for common tasks.
-
-
-## Features
-
-1. **Flexible Graph Construction**
-   - Support for complex topologies including branching, merging, and cycles
-   - Ability to import/export serialized graph definitions for sharing and versioning
-
-2. **Rich Node Ecosystem**
-   - Standard library of nodes for common operations (LLM completion, transformation, filtering, etc.)
-   - Support for custom node development with a simple, consistent API
-
-3. **Native support for async/await**
-   - Nodes can be async functions and will be executed asynchronously.
-   - The graph will wait for all nodes to complete before completing the execution.
-
-4. **Advanced Execution Strategies**
-   - Parallel execution of independent nodes
-   - Conditional execution based on data properties or runtime conditions
-   - Feedback loops and recursive execution
-
-4. **Robust Validation**
-   - Since nodes and graphs are based on pydantic models, they are validated against the pydantic model before execution.
-   - Dry run mode to validate the graph before execution.
-
-5. **Visualization**
-   - Export the graph to a DOT file or mermaid diagram
-
-
-## Examples and Common Patterns
-
-### Graph Patterns 
-#### 1: Basic Linear Flow 
+### 1: Basic Linear Flow 
 ```python
 with Graph(name="basic-linear-flow", description="A basic linear flow for generating question-answer pairs using an LLM") as graph:
    source_node = source(name="load_dataset", inputs=["HuggingFaceH4/mt_bench_prompts"])
@@ -216,7 +233,7 @@ graph LR
     P --> SN[save_dataset]
 ```
 
-#### 2: Fan-out
+### 2: Fan-out
 ```python
 with Graph(name="fan-out-graph", description="A graph with a source node, two processor nodes, and an aggregator node") as graph:
    source_node = source(name="load_dataset", inputs=["HuggingFaceH4/mt_bench_prompts"])
@@ -256,7 +273,7 @@ graph TD
     P3 --> A
 ```
 
-#### 3: Fan-in
+### 3: Fan-in
 ```python 
 with Graph(name="fan-in-graph", description="A graph with multiple sources, an aggregator node and a processor node") as graph:
    source1_node = source(name="load_dataset1", inputs=["HuggingFaceH4/mt_bench_prompts"])
@@ -290,7 +307,7 @@ graph TD
     A --> P[llm_completion]
 ```
 
-#### 4: Conditional Execution
+### 4: Conditional Execution
 ```python
 with Graph(name="conditional-execution-graph", description="A graph with a source node, a conditional node, and two processor nodes and final sink node") as graph:
    source_node = source(name="load_dataset", inputs=["HuggingFaceH4/mt_bench_prompts"])
@@ -316,7 +333,7 @@ graph TD
     P2 --> SN
 ```
 
-#### 5: Cyclic Graphs 
+### 5: Cyclic Graphs 
 
 ```python 
 with Graph(name="cyclic-graph", description="A graph with a source node, a processor node, a conditional node and a sink node") as graph:
@@ -341,50 +358,13 @@ graph TD
     C -->|if condition not met| P
     C -->|if condition met| SN[save_dataset]
 ```
-#### 6: Parallel Processing Disconnected Graphs
-
-```python
-with Graph(name="parallel-processing-disconnected-graphs", description="Graph with two disconnected subgraphs") as graph:
-   source_node1 = source(name="load_dataset1", inputs=["HuggingFaceH4/mt_bench_prompts"])
-   source_node2 = source(name="load_dataset2", inputs=["HuggingFaceH4/mt_bench_prompts2"])
-   processor1_node = llm(name="llm_completion1", inputs=["prompt"], outputs=["output"])
-   processor2_node = llm(name="llm_completion2", inputs=["prompt"], outputs=["output"])
-   processor1_improve_node = llm(name="llm_completion1_improve", inputs=["output"], outputs=["improved_output"])
-   processor2_improve_node = llm(name="llm_completion2_improve", inputs=["output"], outputs=["improved_output"])
-
-   sink1_node = sink(name="save_dataset1", inputs=["improved_output"])
-   sink2_node = sink(name="save_dataset2", inputs=["improved_output"])
-
-   source_node1 >> processor1_node >> processor1_improve_node >> sink1_node
-   source_node2 >> processor2_node >> processor2_improve_node >> sink2_node
-
-graph.run()
-```
-
-```mermaid
-graph TD
-    subgraph Subgraph 1
-        S1[load_dataset1] --> P1[llm_completion1]
-        P1 --> PI1[llm_completion1_improve]
-        PI1 --> SN1[save_dataset1]
-    end
-
-    subgraph Subgraph 2
-        S2[load_dataset2] --> P2[llm_completion2]
-        P2 --> PI2[llm_completion2_improve]
-        PI2 --> SN2[save_dataset2]
-    end
-```
-
-## API Documentation
-
-TODO
 
 ## Future Enhancements
 
 The SDG Hub v2 architecture provides a solid foundation that can be extended in various ways. Some potential future enhancements include:
 
 - Caching
+- Parallel Processing of disconnected graphs
 - Support Streaming Data
 - Integration Ecosystem: Pre-built nodes for popular LLM Inference Endpoints, ML platforms, and storage systems.
 - Monitoring and Alerts
