@@ -77,6 +77,10 @@ dev = [
     "pytest-cov",
     "pytest-html",
     "tox>=4.4.2,<5",
+    # Integration testing dependencies
+    "papermill>=2.4.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.0.0",
 ]
 
 [tool.setuptools_scm]
@@ -145,3 +149,7 @@ follow_imports = "silent"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
