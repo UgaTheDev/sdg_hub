@@ -11,6 +11,7 @@ from datasets import Dataset
 
 from tests.integration.notebook_utils import (
     execute_notebook_with_params,
+    execute_notebook_with_cell_injection,
     validate_notebook_execution,
     extract_notebook_outputs,
 )
@@ -65,63 +66,78 @@ def test_annotation_notebook_dependencies():
 
 def test_annotation_notebook_execution(temp_output_dir: Path):
     """Test end-to-end execution of annotation classification notebook with mocked LLM."""
-    # Mock categories that match the guided_choice in flow configs
-    expected_categories = ["World", "Sports", "Business", "Sci/Tech"]
+    # Create mock setup cell specific to annotation classification
+    mock_setup_cell = {
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {"tags": ["injected-mock"]},
+        "outputs": [],
+        "source": [
+            "# Mock setup for annotation classification testing\n",
+            "from unittest.mock import MagicMock\n",
+            "import openai\n",
+            "\n",
+            "# Mock categories that match guided_choice in flow configs\n",
+            "expected_categories = ['World', 'Sports', 'Business', 'Sci/Tech']\n",
+            "mock_responses = []\n",
+            "for i in range(200):  # Enough for both simple and detailed flows\n",
+            "    category = expected_categories[i % len(expected_categories)]\n",
+            "    mock_responses.append(\n",
+            "        MagicMock(choices=[MagicMock(message=MagicMock(content=category))])\n",
+            "    )\n",
+            "\n",
+            "# Create mock client\n",
+            "mock_client = MagicMock()\n",
+            "mock_model = MagicMock()\n",
+            "mock_model.id = 'meta-llama/Llama-3.3-70B-Instruct'\n",
+            "mock_client.models.list.return_value.data = [mock_model]\n",
+            "mock_client.chat.completions.create.side_effect = mock_responses\n",
+            "\n",
+            "# Replace OpenAI constructor to return our mock client\n",
+            "openai.OpenAI = lambda *args, **kwargs: mock_client\n",
+            "print('✅ Mock LLM setup complete for annotation classification')"
+        ]
+    }
+    
+    # Execute notebook with mock injection
+    executed_notebook_path = execute_notebook_with_cell_injection(
+        ANNOTATION_NOTEBOOK_PATH,
+        injected_cells=[mock_setup_cell],
+        parameters={},
+        output_dir=temp_output_dir,
+    )
 
-    # Create mock responses for flow execution (200 calls to be safe)
-    mock_responses = []
-    for i in range(200):
-        category = expected_categories[i % len(expected_categories)]
-        mock_responses.append(
-            MagicMock(choices=[MagicMock(message=MagicMock(content=category))])
-        )
+    # Validate notebook executed successfully
+    assert validate_notebook_execution(executed_notebook_path), (
+        "Notebook execution failed with errors"
+    )
 
-    with patch("openai.OpenAI") as mock_openai_class:
-        mock_client = MagicMock()
-        mock_model = MagicMock()
-        mock_model.id = "meta-llama/Llama-3.3-70B-Instruct"
-        mock_client.models.list.return_value.data = [mock_model]
-        mock_client.chat.completions.create.side_effect = mock_responses
-        mock_openai_class.return_value = mock_client
+    # Load executed notebook for detailed validation
+    with open(executed_notebook_path, "r") as f:
+        executed_notebook = json.load(f)
 
-        # Execute notebook without parameter injection (notebook has no parameters cell)
-        executed_notebook_path = execute_notebook_with_params(
-            ANNOTATION_NOTEBOOK_PATH,
-            {},  # No parameters to inject
-            output_dir=temp_output_dir,
-        )
+    # Verify all code cells executed
+    executed_cells = 0
+    total_code_cells = 0
+    error_cells = []
 
-        # Validate notebook executed successfully
-        assert validate_notebook_execution(executed_notebook_path), (
-            "Notebook execution failed with errors"
-        )
+    for i, cell in enumerate(executed_notebook["cells"]):
+        if cell.get("cell_type") == "code":
+            total_code_cells += 1
+            if cell.get("execution_count") is not None:
+                executed_cells += 1
 
-        # Load executed notebook for detailed validation
-        with open(executed_notebook_path, "r") as f:
-            executed_notebook = json.load(f)
+            # Check for errors in outputs
+            for output in cell.get("outputs", []):
+                if output.get("output_type") == "error":
+                    error_cells.append(
+                        f"Cell {i}: {output.get('ename', 'Unknown error')}"
+                    )
 
-        # Verify all code cells executed
-        executed_cells = 0
-        total_code_cells = 0
-        error_cells = []
-
-        for i, cell in enumerate(executed_notebook["cells"]):
-            if cell.get("cell_type") == "code":
-                total_code_cells += 1
-                if cell.get("execution_count") is not None:
-                    executed_cells += 1
-
-                # Check for errors in outputs
-                for output in cell.get("outputs", []):
-                    if output.get("output_type") == "error":
-                        error_cells.append(
-                            f"Cell {i}: {output.get('ename', 'Unknown error')}"
-                        )
-
-        assert len(error_cells) == 0, f"Notebook has error cells: {error_cells}"
-        assert executed_cells == total_code_cells, (
-            f"Expected all {total_code_cells} code cells to execute, but only {executed_cells} executed"
-        )
+    assert len(error_cells) == 0, f"Notebook has error cells: {error_cells}"
+    assert executed_cells == total_code_cells, (
+        f"Expected all {total_code_cells} code cells to execute, but only {executed_cells} executed"
+    )
 
 
 def test_annotation_flows_functional(temp_output_dir: Path):
