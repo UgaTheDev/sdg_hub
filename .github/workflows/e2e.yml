@@ -7,8 +7,8 @@ on:
   push:
 
 jobs:
-  start-runner:
-    name: Start self-hosted EC2 runner
+  start-ec2-runner:
+    name: Start EC2 runner
     runs-on: ubuntu-latest
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
@@ -36,38 +36,31 @@ jobs:
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
 
-  hello:
-    name: Do the job on the runner
-    needs: start-runner
-    runs-on: ${{ needs.start-runner.outputs.label }}
+  e2e-test:
+    name: Run E2E tests
+    needs: start-ec2-runner
+    runs-on: ${{ needs.start-ec2-runner.outputs.label }}
+    permissions: {}
     steps:
-      - name: Hello World
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # https://github.com/actions/checkout/issues/249
+          fetch-depth: 0
+
+      - name: Setup Python 3.12
         run: |
-          echo 'Hello World!'
-          uname -a
-          cat /etc/os-release
-          df -h --print-type
-          sudo dnf -y install fio fio-engine-libaio
-          sudo mkdir /var/test
-          # test throughput (sequential writes):
-          sudo fio \
-            --name=sequential_write \
-            --directory=/var/test \
-            --rw=write \
-            --bs=1M \
-            --size=10G \
-            --numjobs=1 \
-            --ioengine=libaio \
-            --iodepth=64 \
-            --direct=1 \
-            --group_reporting \
-            --runtime=60
+          dnf -y install python3.12 python3.12-devel
+
+      - name: Run tox
+        run: |
+          python -m pip install tox
+          tox -e py3-integration
 
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
-      - start-runner
-      - hello
+      - start-ec2-runner
+      - e2e-test
     runs-on: ubuntu-latest
     if: ${{ always() }}  # stop the runner even if the error happened in the previous jobs
     steps:
@@ -82,5 +75,5 @@ jobs:
         with:
           mode: stop
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          label: ${{ needs.start-runner.outputs.label }}
-          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
+          label: ${{ needs.start-e2e-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-ec2-runner.outputs.ec2-instance-id }}
