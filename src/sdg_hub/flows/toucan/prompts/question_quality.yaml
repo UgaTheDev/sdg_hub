@@ -1,0 +1,55 @@
+- role: system
+  content: You are an AI assistant expert at evaluating the quality of tool-use questions across multiple dimensions.
+
+- role: user
+  content: |
+    ## Task
+    Conduct a **Question Quality Assessment** focusing on the **Question Quality** dimension to ensure it meets high standards for realistic tool usage scenarios.
+
+    ## Objective
+    Analyze the provided tool use question and assess its **Question Quality**: Overall clarity, specificity, and effectiveness.
+
+    ## Assessment Criteria
+
+    ### Question Quality
+    **What to Evaluate**: Overall quality, clarity, and effectiveness of the question as a realistic user query.
+
+    **Rating Guidelines**:
+    - **very poor**: Unclear, ambiguous, or poorly constructed question
+    - **poor**: Some clarity issues, missing important context
+    - **average**: Clear and understandable, but could be more specific or engaging
+    - **good**: Well-constructed, clear, specific, and realistic
+    - **excellent**: Exceptionally clear, detailed, engaging, and professionally written
+
+    ## Question Analysis
+
+    ### All Available Tools
+    ```
+    {{all_server_and_tool_information}}
+    ```
+
+    ### Question Content
+    ```
+    {{question}}
+    ```
+
+    ### Intended Tool for This Question
+    ```
+    {{target_tool}}
+    ```
+
+    ## Output Requirements
+
+    Provide analysis with detailed reasoning BEFORE the rating.
+
+    ## Output
+    Provide your response in the following XML format:
+
+    <response>
+      <question_quality>
+        <reasoning>
+          <!-- Detailed explanation covering linguistic quality, information architecture, and actionability -->
+        </reasoning>
+        <rating><!-- Rating: very poor, poor, average, good, excellent --></rating>
+      </question_quality>
+    </response>

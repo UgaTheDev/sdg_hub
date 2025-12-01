@@ -1,0 +1,270 @@
+metadata:
+  id: toucan-tool-calling-v1
+  name: "TOUCAN: Tool-Calling Training Data Generation"
+  description: "Generate synthetic tool-calling training data from MCP servers. Creates questions, assesses quality, generates trajectories via Langflow agents, and evaluates response quality."
+  version: "1.0.0"
+  author: "SDG Hub Contributors"
+
+  recommended_models:
+    default: "meta-llama/Llama-3.3-70B-Instruct"
+    compatible:
+      - "meta-llama/Llama-3.1-70B-Instruct"
+      - "gpt-4"
+      - "gpt-4-turbo"
+    experimental: []
+
+  tags:
+    - "tool-calling"
+    - "agentic"
+    - "synthetic-data"
+    - "mcp"
+    - "quality-filtering"
+
+  license: "Apache-2.0"
+
+  dataset_requirements:
+    required_columns:
+      - "mcp_server_name"
+      - "mcp_server_description"
+      - "mcp_server_tools_available"
+    description: "Dataset must contain MCP server metadata with tool descriptions. mcp_server_tools_available should be a formatted string listing available tools and their descriptions."
+
+blocks:
+  # ============================================================================
+  # STAGE 1: Question Generation
+  # ============================================================================
+
+  # Preserve original MCP server data
+  - block_type: DuplicateColumnsBlock
+    block_config:
+      block_name: preserve_mcp_data
+      input_cols:
+        mcp_server_name: original_server_name
+        mcp_server_description: original_server_description
+        mcp_server_tools_available: original_tools_available
+
+  # Build question generation prompt
+  - block_type: PromptBuilderBlock
+    block_config:
+      block_name: build_question_prompt
+      input_cols:
+        - mcp_server_name
+        - mcp_server_description
+        - mcp_server_tools_available
+      output_cols: question_gen_messages
+      prompt_config_path: prompts/question_generation.yaml
+      format_as_messages: true
+
+  # Generate questions using LLM
+  - block_type: LLMChatBlock
+    block_config:
+      block_name: generate_questions
+      input_cols: question_gen_messages
+      output_cols: raw_questions
+      max_tokens: 2048
+      temperature: 0.8
+      async_mode: true
+
+  # Parse LLM response
+  - block_type: LLMParserBlock
+    block_config:
+      block_name: extract_question_response
+      input_cols: raw_questions
+      extract_content: true
+
+  # Parse XML fields (server_analysis, target_tool, question)
+  - block_type: TextParserBlock
+    block_config:
+      block_name: parse_question_xml
+      input_cols: extract_question_response_content
+      output_cols:
+        - server_analysis
+        - target_tool
+        - question
+      start_tags:
+        - '<server_analysis>'
+        - '<target_tool>'
+        - '<question>'
+      end_tags:
+        - '</server_analysis>'
+        - '</target_tool>'
+        - '</question>'
+
+  # ============================================================================
+  # STAGE 2: Question Quality Assessment
+  # ============================================================================
+
+  # Combine MCP server info into single column
+  - block_type: TextConcatBlock
+    block_config:
+      block_name: combine_server_info
+      input_cols:
+        - mcp_server_name
+        - mcp_server_description
+        - mcp_server_tools_available
+      output_cols: all_server_and_tool_information
+      separator: "\n\n"
+
+  # Build quality assessment prompt
+  - block_type: PromptBuilderBlock
+    block_config:
+      block_name: build_quality_prompt
+      input_cols:
+        - all_server_and_tool_information
+        - question
+        - target_tool
+      output_cols: quality_messages
+      prompt_config_path: prompts/question_quality.yaml
+      format_as_messages: true
+
+  # Assess question quality
+  - block_type: LLMChatBlock
+    block_config:
+      block_name: assess_question_quality
+      input_cols: quality_messages
+      output_cols: raw_quality_scores
+      max_tokens: 2048
+      temperature: 0.3
+      async_mode: true
+
+  # Parse quality response
+  - block_type: LLMParserBlock
+    block_config:
+      block_name: extract_quality_response
+      input_cols: raw_quality_scores
+      extract_content: true
+
+  # Parse quality XML fields
+  - block_type: TextParserBlock
+    block_config:
+      block_name: parse_quality_xml
+      input_cols: extract_quality_response_content
+      output_cols:
+        - question_quality_reasoning
+        - question_quality_rating
+      start_tags:
+        - '<reasoning>'
+        - '<rating>'
+      end_tags:
+        - '</reasoning>'
+        - '</rating>'
+
+  # Filter for high-quality questions only
+  - block_type: ColumnValueFilterBlock
+    block_config:
+      block_name: filter_quality_questions
+      input_cols:
+        - question_quality_rating
+      filter_value:
+        - "good"
+        - "excellent"
+      operation: in
+
+  # ============================================================================
+  # STAGE 3: Trajectory Generation via Langflow Agent
+  # ============================================================================
+
+  # Format question as messages for AgentBlock
+  - block_type: PromptBuilderBlock
+    block_config:
+      block_name: format_agent_input
+      input_cols:
+        - question
+      output_cols: agent_input_messages
+      prompt_config_path: prompts/agent_input.yaml
+      format_as_messages: true
+
+  # Call Langflow agent to generate trajectory
+  - block_type: AgentBlock
+    block_config:
+      block_name: langflow_agent
+      input_cols: agent_input_messages
+      output_cols: agent_response
+      agent_framework: langflow
+      agent_url:  "http://localhost:7860/api/v1/run/692523c3-02de-4c85-89e8-9e8414b8fb48"
+      agent_api_key: "sk-7NZh-BOF-u_0HS-de4eFTUT2tmyqiOwWunhH8cWT26g"
+      async_mode: false
+      timeout: 300.0
+
+  # Extract conversation history from agent response
+  - block_type: RenameColumnsBlock
+    block_config:
+      block_name: rename_agent_response
+      input_cols:
+        agent_response: conversation_history
+
+  # ============================================================================
+  # STAGE 4: Response Quality Assessment
+  # ============================================================================
+
+  # Build response quality prompt
+  - block_type: PromptBuilderBlock
+    block_config:
+      block_name: build_response_quality_prompt
+      input_cols:
+        - question
+        - target_tool
+        - conversation_history
+      output_cols: response_quality_messages
+      prompt_config_path: prompts/response_quality.yaml
+      format_as_messages: true
+
+  # Assess response quality
+  - block_type: LLMChatBlock
+    block_config:
+      block_name: assess_response_quality
+      input_cols: response_quality_messages
+      output_cols: raw_response_quality
+      max_tokens: 4096
+      temperature: 0.3
+      async_mode: true
+
+  # Parse response quality
+  - block_type: LLMParserBlock
+    block_config:
+      block_name: extract_response_quality
+      input_cols: raw_response_quality
+      extract_content: true
+
+  # Parse completeness and conciseness with simple tags
+  - block_type: TextParserBlock
+    block_config:
+      block_name: parse_response_quality
+      input_cols: extract_response_quality_content
+      output_cols:
+        - completeness_reasoning
+        - completeness_rating
+        - conciseness_reasoning
+        - conciseness_rating
+      start_tags:
+        - '<completeness_reasoning>'
+        - '<completeness_rating>'
+        - '<conciseness_reasoning>'
+        - '<conciseness_rating>'
+      end_tags:
+        - '</completeness_reasoning>'
+        - '</completeness_rating>'
+        - '</conciseness_reasoning>'
+        - '</conciseness_rating>'
+
+  # Filter for high-quality responses (completeness)
+  - block_type: ColumnValueFilterBlock
+    block_config:
+      block_name: filter_complete_responses
+      input_cols:
+        - completeness_rating
+      filter_value:
+        - "mostly complete"
+        - "fully complete"
+      operation: in
+
+  # Filter for concise responses
+  - block_type: ColumnValueFilterBlock
+    block_config:
+      block_name: filter_concise_responses
+      input_cols:
+        - conciseness_rating
+      filter_value:
+        - "concise"
+        - "very concise"
+      operation: in
