@@ -491,6 +491,32 @@ class TestFlow:
         assert "MockBlock" in content
         assert "test_block" in content
 
+    def test_to_yaml_from_yaml_roundtrip(self):
+        """Test that to_yaml() output can be loaded by from_yaml()."""
+        # First Party
+        from sdg_hub.core.blocks import UniformColumnValueSetter
+
+        # Create flow with a real registered block
+        block = UniformColumnValueSetter(
+            block_name="setter_block",
+            input_cols=["col1"],
+            reduction_strategy="mode",
+        )
+        flow = Flow(blocks=[block], metadata=self.test_metadata)
+
+        # Save to YAML
+        output_path = Path(self.temp_dir) / "roundtrip.yaml"
+        flow.to_yaml(str(output_path))
+
+        # Load back
+        loaded_flow = Flow.from_yaml(str(output_path))
+
+        # Verify structure matches
+        assert len(loaded_flow.blocks) == len(flow.blocks)
+        assert type(loaded_flow.blocks[0]).__name__ == type(flow.blocks[0]).__name__
+        assert loaded_flow.blocks[0].block_name == flow.blocks[0].block_name
+        assert loaded_flow.metadata.name == flow.metadata.name
+
     def test_string_representations(self):
         """Test string representations of flow."""
         block = self.create_mock_block("test_block")
@@ -527,13 +553,17 @@ class TestFlow:
     ):
         """Create a mock LLM block with model attributes."""
         # First Party
+        from pydantic import SecretStr
         from tests.flow.conftest import MockBlock
 
         block = MockBlock(block_name=name, input_cols=["input"], output_cols=["output"])
+        # Set block_type to "llm" for detection
+        block.block_type = "llm"
         # Add LLM-related attributes
         block.model = model
         block.api_base = api_base
-        block.api_key = api_key
+        # Convert api_key to SecretStr to match real LLM blocks
+        block.api_key = SecretStr(api_key) if isinstance(api_key, str) else api_key
         block.temperature = 0.0
         block.max_tokens = 1024
         return block
@@ -637,7 +667,7 @@ class TestFlow:
         # Check that LLM blocks were modified
         assert flow.blocks[1].model == "new-model"  # llm_block1
         assert flow.blocks[1].api_base == "http://localhost:8101/v1"
-        assert flow.blocks[1].api_key == "NEW_KEY"
+        assert flow.blocks[1].api_key.get_secret_value() == "NEW_KEY"
         assert flow.blocks[1].temperature == 0.7
         assert flow.blocks[1].max_tokens == 2048
 
@@ -696,7 +726,7 @@ class TestFlow:
 
         # Other parameters should remain unchanged
         assert flow.blocks[0].api_base == "http://localhost:8000/v1"
-        assert flow.blocks[0].api_key == "OLD_KEY"
+        assert flow.blocks[0].api_key.get_secret_value() == "OLD_KEY"
         assert flow.blocks[0].max_tokens == 1024
 
     def test_set_model_config_with_kwargs(self):
@@ -793,7 +823,7 @@ class TestFlow:
 
         # Everything else should remain the same
         assert flow.blocks[0].api_base == "http://localhost:8000/v1"
-        assert flow.blocks[0].api_key == "ORIGINAL_KEY"
+        assert flow.blocks[0].api_key.get_secret_value() == "ORIGINAL_KEY"
         assert flow.blocks[0].temperature == 0.5
         assert flow.blocks[0].max_tokens == 1024
         assert flow.blocks[0].custom_param == "custom_value"
@@ -1422,3 +1452,47 @@ class TestFlow:
             FlowValidationError, match="max_concurrency must be greater than 0"
         ):
             flow.generate(dataset, max_concurrency=-1)
+
+    def test_set_model_config_redacts_sensitive_params(self, caplog):
+        """Test API key and secrets redaction in logs using Pydantic SecretStr.
+
+        Verifies that sensitive parameters (api_key) are automatically redacted
+        by SecretStr while non-sensitive ones remain visible.
+        """
+        # Standard
+        import logging
+
+        # First Party
+        from sdg_hub.core.blocks.llm.llm_chat_block import LLMChatBlock
+
+        llm_block = LLMChatBlock(
+            block_name="test_llm", input_cols="messages", output_cols="response"
+        )
+        flow = Flow(metadata=self.test_metadata, blocks=[llm_block])
+
+        with caplog.at_level(logging.INFO, logger="sdg_hub.core.flow.base"):
+            flow.set_model_config(
+                model="openai/gpt-4",
+                api_key="sk-secret-key",
+                temperature=0.7,
+                max_tokens=100,
+            )
+
+        log_messages = [record.message for record in caplog.records]
+        relevant_logs = [
+            msg for msg in log_messages if "Successfully configured" in msg
+        ]
+        assert len(relevant_logs) > 0
+        log_text = relevant_logs[0]
+
+        # Sensitive params must be redacted - SecretStr displays as '**********'
+        assert "**********" in log_text or "SecretStr" in log_text
+        assert "sk-secret-key" not in log_text
+
+        # Non-sensitive params should be visible
+        assert "temperature: 0.7" in log_text
+        assert "max_tokens: 100" in log_text
+
+        # Verify that the api_key was actually set as a SecretStr on the block
+        assert llm_block.api_key is not None
+        assert llm_block.api_key.get_secret_value() == "sk-secret-key"
