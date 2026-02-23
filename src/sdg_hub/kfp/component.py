@@ -5,6 +5,10 @@ This module contains the main KFP component for running SDG Hub flows.
 It is designed to be self-contained and extractable to a separate repository.
 """
 
+# Standard
+from typing import Any
+
+# Third Party
 from kfp import dsl
 from kfp.dsl import Dataset, Metrics, Output
 
@@ -172,7 +176,7 @@ def sdg(
         api_key = os.environ.get("LLM_API_KEY", "")
         api_base = os.environ.get("LLM_API_BASE", "")
 
-        model_kwargs = {
+        model_kwargs: dict[str, Any] = {
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -210,7 +214,7 @@ def sdg(
         f"max_concurrency={max_concurrency}"
     )
 
-    generate_kwargs = {
+    generate_kwargs: dict[str, Any] = {
         "max_concurrency": max_concurrency,
     }
 
