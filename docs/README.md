@@ -60,6 +60,7 @@ Master the orchestration system for building complete flows:
 
 ### Advanced Topics
 - **[API Reference](api-reference.md)** - Complete API documentation
+- **[KFP Component](kfp-component.md)** - Run SDG Hub flows in Kubeflow Pipelines
 - **[Development](development.md)** - Contributing and development guidelines
 
 ## 🤝 Contributing

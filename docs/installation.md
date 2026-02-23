@@ -37,6 +37,17 @@ pip install sdg-hub[vllm]
 uv pip install sdg-hub[vllm]
 ```
 
+### Kubeflow Pipelines (KFP) Support
+For building and running SDG Hub as a Kubeflow Pipelines component:
+
+```bash
+# With pip
+pip install sdg-hub[kfp]
+
+# With uv
+uv pip install sdg-hub[kfp]
+```
+
 ### Examples Dependencies
 For running example notebooks and workflows:
 
@@ -53,10 +64,10 @@ To install everything at once:
 
 ```bash
 # With pip
-pip install sdg-hub[vllm,examples]
+pip install sdg-hub[vllm,kfp,examples]
 
 # With uv
-uv pip install sdg-hub[vllm,examples]
+uv pip install sdg-hub[vllm,kfp,examples]
 ```
 
 ## 🛠️ Development Installation

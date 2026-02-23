@@ -20,4 +20,5 @@
 
 * **Advanced**
   * [API Reference](api-reference.md)
+  * [KFP Component](kfp-component.md)
   * [Development](development.md)

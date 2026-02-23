@@ -52,9 +52,14 @@ uv pip install .[dev]
 # For vLLM support
 uv pip install sdg-hub[vllm]
 
+# For Kubeflow Pipelines component support
+uv pip install sdg-hub[kfp]
+
 # For examples
 uv pip install sdg-hub[examples]
 ```
+
+For KFP component setup and local runner workflow, see `kfp/README.md`.
 
 ## 🚀 Quick Start
 
