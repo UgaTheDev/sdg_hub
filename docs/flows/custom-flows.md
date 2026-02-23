@@ -42,6 +42,11 @@ metadata:
       - "column1"
       - "column2"
     description: "Input dataset requirements..."
+  # Optional: keep only selected generated columns in final output
+  output_columns:
+    - "question"
+    - "response"
+    - "faithfulness_judgment"
 
 blocks:
   - block_type: "BlockName"
@@ -49,6 +54,8 @@ blocks:
       block_name: "unique_name"
       # ... configuration
 ```
+
+Use `output_columns` when you want SDG Hub to prune intermediate columns and keep only selected generated columns (while preserving original input columns).
 
 ### Integration with Discovery
 

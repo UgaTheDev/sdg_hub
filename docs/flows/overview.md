@@ -59,6 +59,9 @@ metadata:
   dataset_requirements:
     required_columns: ["document", "context"]
     description: "Input documents for processing"
+  output_columns:
+    - "question"
+    - "answer"
 
 
 blocks:
@@ -133,6 +136,7 @@ The metadata section supports the following fields for flow configuration:
 | `tags` | `List[string]` | No | `[]` | List of tags for categorization and discovery. Tags are automatically converted to lowercase. |
 | `recommended_models` | `RecommendedModels` | No | `None` | Recommended LLM models for optimal flow performance. See below for structure. |
 | `dataset_requirements` | `DatasetRequirements` | No | `None` | Input dataset requirements and validation rules. See below for structure. |
+| `output_columns` | `List[string]` | No | `None` | Non-empty list of generated columns to keep in the final output. Original input columns are always preserved. |
 
 #### RecommendedModels Structure
 
@@ -197,6 +201,23 @@ dataset_requirements:
 - Sample count validation ensures the dataset meets `min_samples` and respects `max_samples` if set
 - `max_samples` must be greater than or equal to `min_samples` if both are specified
 
+#### Output Columns Behavior
+
+Use `output_columns` to keep only specific generated columns in the final result:
+
+```yaml
+metadata:
+  output_columns:
+    - "question"
+    - "response"
+    - "faithfulness_judgment"
+```
+
+Behavior:
+- If `output_columns` is omitted, all generated columns are kept.
+- If `output_columns` is a non-empty list, SDG Hub drops intermediate columns during execution when safe and performs final cleanup at the end.
+- Original input columns are always retained in the final dataset.
+
 #### Complete Metadata Example
 
 Here's a comprehensive example using all available metadata fields:
@@ -248,6 +269,10 @@ metadata:
       Input dataset should contain documents with contextual information.
       Each document should be well-formed text suitable for Q&A generation.
       Optional domain and difficulty_level fields help tailor generation.
+  output_columns:
+    - "question"
+    - "response"
+    - "faithfulness_judgment"
 ```
 
 ### Blocks Section

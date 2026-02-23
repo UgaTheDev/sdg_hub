@@ -76,7 +76,7 @@ Document → Extractive Summary (n=50) → Question List → Answers → Faithfu
 | `icl_query_1`, `icl_query_2`, `icl_query_3` | Example questions | Yes |
 
 **Output Columns:**
-- `summary` - The extractive summary with annotations
+- `document` - The extractive summary with annotations
 - `question` - Generated question
 - `response` - Generated answer
 - `raw_document` - Original document (preserved)
@@ -160,7 +160,7 @@ print(f"Generated {len(result)} QA pairs")
 
 ```json
 {
-  "summary": "### Extract 1\n> \"Remote work has grown by over 150% since 2020.\"\n\n**Context Marker**: Opening factual statement providing temporal context\n**Relevance**: Very High – Quantifies the transformation scale\n**Relationship**: Establishes cause for changes in Extracts 2 and 3",
+  "document": "### Extract 1\n> \"Remote work has grown by over 150% since 2020.\"\n\n**Context Marker**: Opening factual statement providing temporal context\n**Relevance**: Very High – Quantifies the transformation scale\n**Relationship**: Establishes cause for changes in Extracts 2 and 3",
   "question": "How has remote work adoption changed since the pandemic?",
   "response": "Remote work has grown by over 150% since 2020 due to the pandemic...",
   "faithfulness_judgment": "YES"
@@ -193,7 +193,7 @@ Same as Extractive Summary Flow (see above).
 **Output Columns:**
 
 Same structure as Extractive Summary Flow:
-- `summary`, `question`, `response`, `raw_document`, `faithfulness_explanation`, `faithfulness_judgment`
+- `document`, `question`, `response`, `raw_document`, `faithfulness_explanation`, `faithfulness_judgment`
 
 **Key Parameters:**
 
@@ -251,7 +251,7 @@ result = flow.generate(
 
 ```json
 {
-  "summary": "The document explores the transformation of work practices during the pandemic, examining both the benefits and challenges of remote work adoption. It argues that hybrid models represent an optimal balance between flexibility and collaboration.",
+  "document": "The document explores the transformation of work practices during the pandemic, examining both the benefits and challenges of remote work adoption. It argues that hybrid models represent an optimal balance between flexibility and collaboration.",
   "question": "What central argument does the document make about the future of work?",
   "response": "The document argues that hybrid models represent the optimal balance...",
   "faithfulness_judgment": "YES"
