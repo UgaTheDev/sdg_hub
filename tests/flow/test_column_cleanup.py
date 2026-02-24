@@ -2,15 +2,14 @@
 """Tests for column cleanup feature."""
 
 # Third Party
-import pandas as pd
-import pytest
-
 # First Party
 from sdg_hub.core.blocks.transform.duplicate_columns import DuplicateColumnsBlock
 from sdg_hub.core.blocks.transform.text_concat import TextConcatBlock
 from sdg_hub.core.flow.base import Flow
 from sdg_hub.core.flow.column_tracker import ColumnDependencyTracker
 from sdg_hub.core.flow.metadata import FlowMetadata
+import pandas as pd
+import pytest
 
 
 class TestFlowMetadataColumnCleanup:
@@ -45,13 +44,13 @@ class TestFlowMetadataColumnCleanup:
                 output_columns=["col1", "col1"],
             )
 
-    def test_output_columns_empty_list(self):
-        """Test that empty list is accepted (keeps only original columns)."""
-        metadata = FlowMetadata(
-            name="test",
-            output_columns=[],
-        )
-        assert metadata.output_columns == []
+    def test_output_columns_empty_list_rejected(self):
+        """Test that empty list is rejected."""
+        with pytest.raises(ValueError, match="must not be empty"):
+            FlowMetadata(
+                name="test",
+                output_columns=[],
+            )
 
 
 class TestColumnDependencyTracker:
@@ -99,9 +98,7 @@ class TestColumnDependencyTracker:
 
     def test_get_droppable_columns_preserves_final(self):
         """Test that final output columns are never dropped."""
-        block1 = TextConcatBlock(
-            block_name="b1", input_cols=["a"], output_cols="final"
-        )
+        block1 = TextConcatBlock(block_name="b1", input_cols=["a"], output_cols="final")
 
         tracker = ColumnDependencyTracker(
             blocks=[block1],
@@ -115,9 +112,7 @@ class TestColumnDependencyTracker:
 
     def test_get_droppable_columns_preserves_original(self):
         """Test that original columns are never dropped."""
-        block1 = TextConcatBlock(
-            block_name="b1", input_cols=["a"], output_cols="temp"
-        )
+        block1 = TextConcatBlock(block_name="b1", input_cols=["a"], output_cols="temp")
 
         tracker = ColumnDependencyTracker(
             blocks=[block1],
@@ -174,9 +169,7 @@ class TestColumnDependencyTrackerEdgeCases:
         block1 = TextConcatBlock(
             block_name="b1", input_cols=["a"], output_cols="unused"
         )
-        block2 = TextConcatBlock(
-            block_name="b2", input_cols=["a"], output_cols="final"
-        )
+        block2 = TextConcatBlock(block_name="b2", input_cols=["a"], output_cols="final")
 
         tracker = ColumnDependencyTracker(
             blocks=[block1, block2],
