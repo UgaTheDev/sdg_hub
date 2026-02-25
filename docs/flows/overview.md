@@ -387,6 +387,33 @@ flow.set_model_config(
 # The configuration applies to all LLM blocks in the flow
 ```
 
+### Runtime Agent Configuration
+
+Flows that contain agent blocks (for example `AgentBlock`) require runtime agent configuration before `flow.generate(...)`:
+
+```python
+# Configure all agent blocks in the flow
+flow.set_agent_config(
+    agent_framework="langflow",
+    agent_url="http://localhost:7860/api/v1/run/my-flow",
+    agent_api_key="your-agent-key",
+)
+
+# Optional: configure only selected blocks
+flow.set_agent_config(
+    agent_url="http://localhost:7860/api/v1/run/special-flow",
+    blocks=["run_agent_trajectory"],
+)
+```
+
+You can check and manage state with:
+
+```python
+flow.is_agent_config_required()
+flow.is_agent_config_set()
+flow.reset_agent_config()
+```
+
 ## 🚀 Flow Execution
 
 ### Basic Execution

@@ -9,6 +9,7 @@ SDG Hub provides a rich ecosystem of pre-built flows for various data generation
 - **QA Generation Flows** - Create training datasets with question-answer pairs for knowledge tuning
 - **Text Analysis Flows** - Extract structured insights from unstructured text content
 - **Multilingual Flows** - Localized variants for non-English data generation
+- **Agentic Tool-Use Flows** - Generate tool-calling trajectories from MCP tool catalogs
 
 All flows support:
 - Automatic discovery and registration
@@ -22,6 +23,7 @@ All flows support:
 | Flow Category | Flow Count | Primary Use Case | Tags |
 |---------------|------------|------------------|------|
 | [Enhanced Multi-Summary QA](#enhanced-multi-summary-qa-flows) | 4 | Knowledge tuning dataset generation | `knowledge-tuning`, `document-internalization` |
+| [Agentic Tool-Use](#toucan-tool-use-data-generation-flow) | 1 | Tool-use trajectory dataset generation | `agentic`, `tool-use`, `mcp` |
 | [Multilingual QA](#japanese-multilingual-multi-summary-qa-flow) | 1 | Japanese language QA generation | `multilingual`, `japanese` |
 | [Text Analysis](#structured-text-insights-extraction-flow) | 1 | NLP insights extraction | `text-analysis`, `nlp` |
 
@@ -532,6 +534,87 @@ Generation Complete:
   Total: {len(extractive_data) + len(detailed_data) + len(key_facts_data) + len(doc_qa_data)} QA pairs
 """)
 ```
+
+---
+
+## Toucan Tool-Use Data Generation Flow
+
+**Name:** `Toucan Tool-Use Data Generation`
+
+**Purpose:** Generate high-quality tool-use datasets from MCP tool collections by synthesizing realistic user tasks, executing an external agent, and filtering low-quality trajectories.
+
+**Location:** `src/sdg_hub/flows/agentic/tool_datagen/`
+
+### Architecture
+
+```yaml
+MCP Tool Catalog → Tool Sampling → Question Synthesis →
+Question Quality Filter → Agent Trajectory Execution →
+Response Quality Filter → Final Tool-Use Dataset
+```
+
+### Input Requirements
+
+| Column | Description | Required |
+|--------|-------------|----------|
+| `tool_list` | Python list of MCP tool objects (`name`, `description`, `inputSchema`) | Yes |
+| `mcp_server_name` | MCP server name for the tool collection | Yes |
+| `mcp_server_description` | MCP server description/context | Yes |
+
+### Output Highlights
+
+- `question` - Synthesized user request grounded in sampled tools
+- `target_tools` - Intended tools selected by the question generation stage
+- `extract_agent_text_text` - Extracted agent interaction text/trajectory
+- `completeness_rating` - Response completeness score from LLM evaluation
+- `conciseness_rating` - Response conciseness score from LLM evaluation
+
+### Runtime Configuration Notes
+
+This flow contains both LLM and agent blocks:
+
+- Configure model settings with `flow.set_model_config(...)`
+- Configure agent endpoint/auth with `flow.set_agent_config(...)` before `flow.generate(...)`
+
+### Example Usage
+
+```python
+from datasets import Dataset
+from sdg_hub.core.flow import Flow, FlowRegistry
+
+FlowRegistry.discover_flows()
+flow_path = FlowRegistry.get_flow_path("Toucan Tool-Use Data Generation")
+flow = Flow.from_yaml(flow_path)
+
+flow.set_model_config(
+    model="openai/gpt-5.2",
+    api_key="your-openai-key",
+)
+
+flow.set_agent_config(
+    agent_framework="langflow",
+    agent_url="http://localhost:7860/api/v1/run/default",
+    agent_api_key="your-langflow-key",
+)
+
+dataset = Dataset.from_dict(
+    {
+        "tool_list": [[{"name": "search_products", "description": "Search catalog"}]],
+        "mcp_server_name": ["ecommerce-tools"],
+        "mcp_server_description": ["Tools for catalog search and order management"],
+    }
+)
+
+result = flow.generate(dataset, max_concurrency=10)
+```
+
+### When to Use
+
+- Building SFT/RLHF-style tool-use datasets with explicit tool trajectories
+- Creating realistic MCP benchmark data from existing tool catalogs
+- Evaluating external agent quality before downstream fine-tuning
+
+For runnable scripts and a notebook, see `examples/agentic/ecommerce_mcp/`.
 
 ---
 
