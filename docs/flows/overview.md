@@ -136,7 +136,7 @@ The metadata section supports the following fields for flow configuration:
 | `tags` | `List[string]` | No | `[]` | List of tags for categorization and discovery. Tags are automatically converted to lowercase. |
 | `recommended_models` | `RecommendedModels` | No | `None` | Recommended LLM models for optimal flow performance. See below for structure. |
 | `dataset_requirements` | `DatasetRequirements` | No | `None` | Input dataset requirements and validation rules. See below for structure. |
-| `output_columns` | `List[string]` | No | `None` | Non-empty list of generated columns to keep in the final output. Original input columns are always preserved. |
+| `output_columns` | `List[string]` | No | `None` | Non-empty list of generated columns to keep in the final output. Original input columns are always preserved. If any listed column is missing from the final dataset, flow execution fails with a validation error. |
 
 #### RecommendedModels Structure
 
@@ -216,6 +216,7 @@ metadata:
 Behavior:
 - If `output_columns` is omitted, all generated columns are kept.
 - If `output_columns` is a non-empty list, SDG Hub drops intermediate columns during execution when safe and performs final cleanup at the end.
+- If any column in `output_columns` is missing from the final dataset, SDG Hub raises a validation error.
 - Original input columns are always retained in the final dataset.
 
 #### Complete Metadata Example
