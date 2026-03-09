@@ -380,7 +380,7 @@ Same as Extractive/Detailed flows (includes `icl_*` fields).
 **Output Columns:**
 - `question` - Generated question
 - `response` - Generated answer
-- `raw_document` - Original document (preserved)
+- `document` - Original document (preserved)
 - `faithfulness_explanation` - Evaluation explanation
 - `faithfulness_judgment` - "YES" or "NO"
 
@@ -436,7 +436,7 @@ result = flow.generate(dataset, max_concurrency=50)
 {
   "question": "What are the main challenges companies faced with remote work?",
   "response": "Companies faced several challenges including communication gaps, team cohesion issues, and difficulties maintaining company culture...",
-  "raw_document": "[Full original document]",
+  "document": "[Full original document]",
   "faithfulness_judgment": "YES"
 }
 ```

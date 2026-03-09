@@ -727,7 +727,7 @@ Checkpoint directories contain:
 
 - Checkpoints are flow-specific using `flow_id` to prevent mixing incompatible data
 - Remaining samples are identified by comparing input dataset with completed samples using common columns
-- If all samples are completed, Flow skips processing and returns merged results immediately
+- If all samples are completed, Flow skips processing and returns merged results immediately, while still applying `output_columns` cleanup when configured
 - Clean up checkpoint directories manually when no longer needed
 
 ## 📊 Flow Metrics and Reporting
