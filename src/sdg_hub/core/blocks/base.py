@@ -46,6 +46,10 @@ class BaseBlock(BaseModel, ABC):
         Output columns to write to the DataFrame (string, list of strings, or mapping).
     """
 
+    _STRUCTURAL_FIELDS: frozenset = frozenset(
+        {"input_cols", "output_cols", "block_name", "block_type"}
+    )
+
     block_name: str = Field(
         ..., description="Unique identifier for this block instance"
     )
@@ -299,6 +303,14 @@ class BaseBlock(BaseModel, ABC):
             block_overrides = {
                 k: v for k, v in kwargs.items() if k in self.__class__.model_fields
             }
+
+            # Reject overrides of structural fields that define block wiring
+            structural_overrides = set(block_overrides) & self._STRUCTURAL_FIELDS
+            if structural_overrides:
+                raise ValueError(
+                    f"Cannot override structural fields at runtime: {sorted(structural_overrides)}. "
+                    f"These fields define block wiring and must be set in the YAML/config."
+                )
 
             # Validate and apply block field overrides if any
             original_values = {}
