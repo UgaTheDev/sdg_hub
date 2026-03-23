@@ -2,6 +2,10 @@
 
 [Back to overview](../README.md)
 
+<p align="center">
+  <img src="../diagrams/png/sdg_pipeline_wide_2x.png" alt="Data Generation Pipeline" />
+</p>
+
 ## 1. Document Summarization
 
 To bootstrap the process, we generate **three complementary types of summaries** for each source document. This ensures the model captures content at multiple levels of abstraction:
