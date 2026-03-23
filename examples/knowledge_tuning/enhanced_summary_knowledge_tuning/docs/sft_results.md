@@ -1,5 +1,7 @@
 # SFT Benchmark Results
 
+[Back to overview](../README.md)
+
 **Teacher model for generation:** `openai/gpt-oss-120b`
 **Student model trained:** `meta-llama/Llama-3.1-8B-Instruct`
 **Training method:** Supervised Fine-Tuning (SFT)

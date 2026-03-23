@@ -1,5 +1,7 @@
 # Continued Pre-training (CPT) Results
 
+[Back to overview](../README.md)
+
 We performed continued pre-training (CPT) using next-token prediction on augmented documents, without applying any chat template for the model input. To improve generalization and mitigate overfitting, we incorporated **RedPajama v2** data as a replay buffer, constituting 10% of the total input tokens.
 
 <table>
@@ -15,4 +17,4 @@ We performed continued pre-training (CPT) using next-token prediction on augment
 
 Notes:
 - CPT shows signs of overfitting at higher token count (number of summaries) on knowledge data.
-- We use red pajama mix to prevent some of this overfitting.
+- We use RedPajama mix to prevent some of this overfitting.

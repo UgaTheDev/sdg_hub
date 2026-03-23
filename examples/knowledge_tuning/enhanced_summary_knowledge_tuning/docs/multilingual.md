@@ -1,5 +1,7 @@
 # Multilingual Support
 
+[Back to overview](../README.md)
+
 The knowledge generation notebook supports generating training data in **any language**. Translated flow variants are resolved automatically — if a pre-translated flow exists it is used directly, otherwise `translate_flow()` creates one on-demand using an LLM.
 
 ## Quick Start

@@ -1,5 +1,7 @@
 # Data Generation Pipeline
 
+[Back to overview](../README.md)
+
 ## 1. Document Summarization
 
 To bootstrap the process, we generate **three complementary types of summaries** for each source document. This ensures the model captures content at multiple levels of abstraction:
