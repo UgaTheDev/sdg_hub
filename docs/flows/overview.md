@@ -215,8 +215,8 @@ metadata:
 
 Behavior:
 - If `output_columns` is omitted, all generated columns are kept.
-- If `output_columns` is a non-empty list, SDG Hub drops intermediate columns during execution when safe and performs final cleanup at the end.
-- Columns that are not declared in any block `input_cols` are retained until final cleanup to avoid dropping data that custom blocks may read programmatically.
+- If `output_columns` is a non-empty list, SDG Hub drops intermediate columns during execution only when a known last consumer can be inferred from declared block `input_cols`, then performs final cleanup at the end.
+- Columns with no declared consumers (for example, custom blocks that read columns programmatically) are deferred to final cleanup rather than dropped mid-flow.
 - If any column in `output_columns` is missing from the final dataset, SDG Hub raises a validation error.
 - Original input columns are always retained in the final dataset.
 
