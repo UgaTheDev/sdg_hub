@@ -55,7 +55,7 @@ blocks:
       # ... configuration
 ```
 
-Use `output_columns` when you want SDG Hub to prune intermediate columns and keep only selected generated columns (while preserving original input columns). If you set this field, provide at least one generated column and ensure each listed column is produced by the flow, otherwise execution fails with a validation error.
+Use `output_columns` when you want SDG Hub to prune intermediate columns and keep only selected generated columns (while preserving original input columns). If you set this field, provide at least one generated column and ensure each listed column is produced by the flow, otherwise execution fails with a validation error. For custom blocks, declare consumed columns in `input_cols` when possible so SDG Hub can safely drop intermediates earlier; undeclared columns are deferred to final cleanup.
 
 ### Integration with Discovery
 
