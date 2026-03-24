@@ -2,6 +2,10 @@
 
 SDG Hub requires Python 3.9+ and can be installed via pip or from source for development.
 
+## 🔐 Security Notice
+
+SDG Hub currently constrains LiteLLM to `<=1.82.6` because upstream LiteLLM `1.82.7` and `1.82.8` were reported with a malicious `.pth` payload. If you manage dependencies manually, avoid those versions (see the [upstream advisory](https://github.com/BerriAI/litellm/issues/24518)).
+
 ## 📦 Production Installation
 
 ### Basic Installation
